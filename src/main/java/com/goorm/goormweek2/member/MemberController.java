@@ -5,7 +5,6 @@ import com.goorm.goormweek2.security.token.TokenDTO;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.apache.coyote.Response;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,7 +31,7 @@ public class MemberController {
         return ResponseEntity.ok();
     }
 
-    @DeleteMapping("/api/v1/logout")
+    @DeleteMapping("/logout")
     public ResponseEntity<String> logout(HttpServletRequest request) {
         //구현
         return ResponseEntity.ok("로그아웃 성공");

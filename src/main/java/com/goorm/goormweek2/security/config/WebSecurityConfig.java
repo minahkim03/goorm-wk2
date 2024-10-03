@@ -5,6 +5,7 @@ import com.goorm.goormweek2.security.token.TokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -27,6 +28,7 @@ public class WebSecurityConfig {
 
     private final UserDetailsService userDetailsService;
     private final TokenProvider tokenProvider;
+    private final RedisTemplate redisTemplate;
 
     @Bean
     public BCryptPasswordEncoder encoder() {
@@ -70,7 +72,7 @@ public class WebSecurityConfig {
                 .permitAll()
             )
             .logout(LogoutConfigurer::permitAll)
-            .addFilterBefore(new TokenAuthenticationFilter(tokenProvider),
+            .addFilterBefore(new TokenAuthenticationFilter(tokenProvider, redisTemplate),
                 UsernamePasswordAuthenticationFilter.class)
             .logout(logout -> logout
                 .logoutUrl("/logout")

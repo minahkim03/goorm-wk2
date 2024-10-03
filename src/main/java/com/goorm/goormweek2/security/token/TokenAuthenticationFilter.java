@@ -1,34 +1,47 @@
 package com.goorm.goormweek2.security.token;
 
+import com.goorm.goormweek2.security.config.CookieUtils;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @RequiredArgsConstructor
 public class TokenAuthenticationFilter extends OncePerRequestFilter {
     private final TokenProvider tokenProvider;
+    private final RedisTemplate redisTemplate;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
         FilterChain filterChain) throws ServletException, IOException {
 
-        String token = request.getHeader("Authorization");
-        TokenDTO jwtTokenDto = tokenProvider.resolveToken(request);
-        if (token != null && token.startsWith("Bearer ")) {
-            if (!tokenProvider.validateToken(액세스토큰) {
-                response.sendError(401, "만료되었습니다.");
-                throw new ExpiredJwtException(null, null, "Token has expired");
+        Optional<Cookie> accessToken = CookieUtils.getCookie((HttpServletRequest) request,"accessToken" );
+        validBlackToken(String.valueOf(accessToken));
+        if(accessToken.isPresent()) {
+            boolean isValid = tokenProvider.validateToken(String.valueOf(accessToken.get().getValue()));
+            UsernamePasswordAuthenticationToken authentication;
+            if (isValid) {
+                authentication = (UsernamePasswordAuthenticationToken) tokenProvider.getAuthentication(accessToken.get().getValue());
             }
-            Authentication authentication = tokenProvider.getAuthentication(액세스토큰);
-            SecurityContextHolder.getContext().setAuthentication(authentication);
         }
+
         filterChain.doFilter(request, response);
     }
+
+    private void validBlackToken(String accessToken) {
+
+        String blackToken = (String) redisTemplate.opsForValue().get(accessToken);
+        if(StringUtils.hasText(blackToken))
+            throw new Error("로그아웃 처리된 엑세스 토큰입니다.");
+    }
+
 }

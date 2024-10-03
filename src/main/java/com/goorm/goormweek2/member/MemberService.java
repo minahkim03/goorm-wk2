@@ -1,9 +1,14 @@
 package com.goorm.goormweek2.member;
 
 import com.goorm.goormweek2.security.token.TokenDTO;
+import com.goorm.goormweek2.security.token.TokenProvider;
+import com.goorm.goormweek2.security.token.TokenRedis;
+import com.goorm.goormweek2.security.token.TokenRedisRepository;
 import jakarta.transaction.Transactional;
 import java.util.NoSuchElementException;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -18,6 +23,8 @@ public class MemberService {
     private final MemberRepository memberRepository;
     private final AuthenticationManager authenticationManager;
     private final TokenProvider tokenProvider;
+    private final TokenRedisRepository tokenRedisRepository;
+    private final RedisTemplate redisTemplate;
 
     //회원가입
     public void register(String email, String password) {
@@ -41,14 +48,19 @@ public class MemberService {
                 = new UsernamePasswordAuthenticationToken(email, password);
             Authentication authentication
                 = authenticationManager.authenticate(token);
-            TokenDTO token = tokenProvider.generateToken(authentication);
-
-            return token;
+            TokenDTO jwtToken = tokenProvider.generateToken(authentication);
+            tokenRedisRepository.save(
+                new TokenRedis(authentication.getName(), jwtToken.getAccessToken(), jwtToken.getRefreshToken()));
+            return jwtToken;
         }
     }
 
     //로그아웃
     public void logout(String token) {
-//        로그아웃 구현
+        TokenRedis tokenRedis = tokenRedisRepository.findByAccessToken(token)
+            .orElseThrow();
+        Long expirationTime = tokenProvider.getRemainingExpirationTime(token);
+        redisTemplate.opsForValue().set(token, "logout", expirationTime, TimeUnit.MILLISECONDS);
+        tokenRedisRepository.delete(tokenRedis);
     }
 }

@@ -1,17 +1,20 @@
 package com.goorm.goormweek2.security.token;
 
 import static java.lang.System.getenv;
-
 import com.goorm.goormweek2.member.MemberRepository;
+import com.goorm.goormweek2.security.config.CookieUtils;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.UnsupportedJwtException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -30,6 +33,7 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class TokenProvider {
 
+    private final TokenRedisRepository tokenRedisRepository;
     Map<String, String> env = getenv();
     private String secretKey = Base64.getEncoder().encodeToString(
         Objects.requireNonNull(env.get("JWT_SECRET")).getBytes());
@@ -38,7 +42,27 @@ public class TokenProvider {
 
     public TokenDTO generateToken(Authentication authentication) {
 
-        //구현
+        long currentTime = (new Date()).getTime();
+
+        Date accessTokenExpirationTime = new Date(currentTime + (1000 * 60 * 60 * 24));
+        Date refreshTokenExpirationTime = new Date(currentTime + (1000 * 60 * 60 * 24 * 7));
+
+        String accessToken = Jwts.builder()
+            .setIssuedAt(new Date(currentTime))
+            .setExpiration(accessTokenExpirationTime)
+            .signWith(SignatureAlgorithm.HS256, secretKey)
+            .compact();
+
+        String refreshToken = Jwts.builder()
+            .setExpiration(refreshTokenExpirationTime)
+            .signWith(SignatureAlgorithm.HS256, secretKey)
+            .compact();
+
+        return TokenDTO.builder()
+            .grantType("Bearer")
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .build();
 
     }
 
@@ -60,16 +84,42 @@ public class TokenProvider {
     }
 
     //액세스 토큰과 리프레시 토큰 함께 재발행
-    public TokenDTO reissueToken(String refreshToken) {
+    public TokenDTO reissueToken(String token, HttpServletRequest request, HttpServletResponse response) {
 
-        //구현
+        CookieUtils.deleteCookie(request, response, "accessToken" );
+
+        TokenRedis tokenRedis = tokenRedisRepository.findByAccessToken(token)
+            .orElseThrow();
+
+        String refreshToken = tokenRedis.getRefreshToken();
+        String memberId = tokenRedis.getId();
+
+        UsernamePasswordAuthenticationToken authentication = (UsernamePasswordAuthenticationToken) getAuthentication(refreshToken);
+
+        TokenDTO tokenDTO = generateToken(authentication);
+
+        CookieUtils.saveCookie(response, tokenDTO.getAccessToken());
+
+        tokenRedis.updateToken(tokenDTO.getAccessToken(), tokenDTO.getRefreshToken());
+        tokenRedisRepository.save(tokenRedis);
+
+        return tokenDTO;
 
     }
 
     public TokenDTO resolveToken(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            // 구현
+            String token = bearerToken.substring(7);
+
+            TokenRedis tokenRedis = tokenRedisRepository.findByAccessToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid token"));
+
+            return TokenDTO.builder()
+                .grantType("Bearer")
+                .accessToken(tokenRedis.getAccessToken())
+                .refreshToken(tokenRedis.getRefreshToken())
+                .build();
         }
         return null;
     }
@@ -97,4 +147,14 @@ public class TokenProvider {
     public Claims getClaims(String token) {
         return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).getBody();
     }
+
+    public Long getRemainingExpirationTime(String token) {
+        Claims claims = getClaims(token);
+        Date expirationDate = claims.getExpiration();
+        long now = (new Date()).getTime();
+
+        return expirationDate.getTime() - now;
+    }
+
+
 }

@@ -1,6 +1,7 @@
 package com.goorm.goormweek2.member;
 
 import com.goorm.goormweek2.member.MemberDTO.GeneralDto;
+import com.goorm.goormweek2.security.config.CookieUtils;
 import com.goorm.goormweek2.security.token.TokenDTO;
 import com.goorm.goormweek2.security.token.TokenProvider;
 import jakarta.servlet.http.Cookie;
@@ -12,7 +13,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
@@ -40,16 +40,22 @@ public class MemberController {
     }
 
     @DeleteMapping("/logout")
-    public ResponseEntity<String> logout(HttpServletRequest request) {
+    public ResponseEntity<String> logout(HttpServletRequest request, HttpServletResponse response) {
         TokenDTO token = tokenProvider.resolveToken(request);
         memberService.logout(token.getAccessToken());
+        CookieUtils.deleteCookie(request, response, "accessToken" );
         return ResponseEntity.ok("로그아웃 성공");
     }
 
     @GetMapping("/reissue")
     public ResponseEntity<?> reissue(HttpServletRequest request, HttpServletResponse response) {
         TokenDTO token = tokenProvider.resolveToken(request);
-        tokenProvider.reissueToken(token.getAccessToken(), request, response);
+        TokenDTO newToken = tokenProvider.reissueToken(token.getAccessToken(), request, response);
+        Cookie cookie = new Cookie("access_token", newToken.getAccessToken());
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setMaxAge(60 * 30);
+        response.addCookie(cookie);
         return ResponseEntity.ok(null);
     }
 

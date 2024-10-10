@@ -92,7 +92,6 @@ public class TokenProvider {
             .orElseThrow();
 
         String refreshToken = tokenRedis.getRefreshToken();
-        String memberId = tokenRedis.getId();
 
         UsernamePasswordAuthenticationToken authentication = (UsernamePasswordAuthenticationToken) getAuthentication(refreshToken);
 
@@ -155,6 +154,4 @@ public class TokenProvider {
 
         return expirationDate.getTime() - now;
     }
-
-
 }
